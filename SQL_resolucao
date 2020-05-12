@@ -1,0 +1,134 @@
+CREATE DATABASE EX05A
+GO
+USE EX05A
+
+CREATE TABLE cliente (
+codigo		INT IDENTITY NOT NULL,
+nome		VARCHAR(100) NOT NULL,
+telefone	VARCHAR(15) NOT NULL
+PRIMARY KEY (codigo))
+
+CREATE TABLE produto (
+codigo			INT IDENTITY NOT NULL,
+produto			VARCHAR(100) NOT NULL,
+valor_unitario	DECIMAL(8,2) NOT NULL
+PRIMARY KEY (codigo))
+
+CREATE TABLE venda (
+cod_cli			INT NOT NULL,
+cod_prod		INT NOT NULL,
+data_hora		DATETIME NOT NULL,
+quantidade		INT NOT NULL,
+valor_un		DECIMAL(8,2) NOT NULL,
+valor_total		DECIMAL(10,2) NOT NULL
+PRIMARY KEY (cod_cli, cod_prod, data_hora),
+FOREIGN KEY (cod_cli) REFERENCES cliente(codigo),
+FOREIGN KEY (cod_prod) REFERENCES produto(codigo))
+
+CREATE TABLE bonus (
+id				INT IDENTITY NOT NULL,
+valor			DECIMAL(8,2) NOT NULL,
+premio			VARCHAR(100) NOT NULL
+PRIMARY KEY (id))
+
+INSERT INTO cliente (nome, telefone) VALUES 
+('Mario L. Lins', '(11)97702-1112'),
+('Graziella D. M. Lins', '(11)98615-2093'),
+('Janete A. L. Lins', '(35)9746-9282'),
+('Marco A. P. Lins', '(35)9768-1020')
+
+INSERT INTO produto (produto, valor_unitario) VALUES
+('Caneta Esferográfica', 2.5),
+('Caneta Ponta Porosa', 5.5),
+('Lápis HB', 1.0),
+('Lapiseira 0,3mm', 18.7),
+('Lapiseira 0,5mm', 22.85),
+('Lapiseira 0,7mm', 20.2),
+('Lapiseira 0,9mm', 19.5),
+('Lapiseira 2,0mm', 15.0),
+('Caixa de grafites 0,3mm c/ 10 grafites', 8),
+('Caixa de grafites 0,5mm c/ 10 grafites', 10),
+('Caixa de grafites 0,7mm c/ 10 grafites', 9),
+('Caixa de grafites 0,9mm c/ 10 grafites', 8),
+('Borracha', 2),
+('Caderno Universitário 100fls', 15),
+('Caderno Universitário 100fls 4 matérias', 22),
+('Caderno Universitário 200fls 10 matérias', 30),
+('Calculadora convencional', 15),
+('Calculadora científica', 60),
+('Régua 30cm',4),
+('Esquadro 45°',8),
+('Esquadro 60°',10),
+('Compasso',15),
+('Compasso Escalonável',85)
+
+INSERT INTO bonus (valor,premio) VALUES
+(1000,'Jogo de Copos'),
+(2000,'Jogo de Pratos'),
+(3000,'Jogo de Talheres'),
+(4000,'Jogo de Porcelana'),
+(5000,'Jogo de Cristais')
+
+CREATE PROCEDURE registra_venda(@id_cliente INT, @id_produto INT, @quantidade INT)
+AS
+	DECLARE @valor_un DECIMAL(8,2),
+			@data DATETIME,
+			@valor_tot DECIMAL(10,2)
+
+	SET @valor_un = (SELECT valor_unitario AS v FROM produto WHERE produto.codigo = @id_produto)
+	SET @data = GETDATE()
+	SET @valor_tot = @valor_un*@quantidade
+
+	INSERT INTO venda (cod_cli, cod_prod, data_hora, quantidade, valor_un, valor_total) VALUES
+			(@id_cliente, @id_produto, @data, @quantidade, @valor_un, @valor_tot)
+
+CREATE PROCEDURE gera_vendas(@num_cliente INT)
+AS
+	DECLARE @quant_prod INT,
+			@quant_venda INT,
+			@id_produto INT,
+			@numero INT
+
+	SET @numero=@num_cliente
+	WHILE (@numero > 0)
+	BEGIN
+		SET @quant_prod = CAST(RAND()*50 AS INT)+1
+		WHILE (@quant_prod > 0)
+		BEGIN
+			SET @id_produto = 1+CAST(RAND()*(SELECT COUNT(codigo) FROM produto) AS INT)
+			SET @quant_venda = CAST(RAND()*20 AS INT)*5 + 5
+			EXEC registra_venda @numero,@id_produto,@quant_venda
+			SET @quant_prod = @quant_prod - 1
+		END
+		SET @numero = @numero - 1
+	END
+
+CREATE FUNCTION fn_bonus()
+RETURNS @tabela TABLE(
+codigo		INT,
+nome		VARCHAR(100),
+total		DECIMAL(10,2),
+saldo		DECIMAL(10,2),
+valor_bonus	DECIMAL(10,2),
+bonus		VARCHAR(100))
+AS
+BEGIN
+	INSERT INTO @tabela (codigo, nome) SELECT cliente.codigo, cliente.nome FROM cliente 
+	UPDATE @tabela SET total=(SELECT SUM(valor_total) FROM venda WHERE codigo = venda.cod_cli GROUP BY venda.cod_cli)
+	UPDATE @tabela SET valor_bonus=(SELECT MAX(valor) FROM bonus WHERE bonus.valor<total)
+	UPDATE @tabela SET bonus=(SELECT premio FROM bonus WHERE bonus.valor=valor_bonus)
+	UPDATE @tabela SET saldo=total-valor_bonus
+	RETURN
+END
+
+DROP FUNCTION fn_bonus
+
+EXEC registra_venda 1,1,20
+EXEC registra_venda 1,3,50
+EXEC registra_venda 1,4,30
+EXEC registra_venda 1,5,20
+EXEC registra_venda 1,6,20
+
+EXEC gera_vendas 4
+
+SELECT * FROM fn_bonus()
